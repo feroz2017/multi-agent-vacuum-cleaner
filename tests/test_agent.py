@@ -1,4 +1,4 @@
-"""Unit and integration tests for the vacuum agent (plan §6)."""
+"""Tests for VacuumAgent and navigation helpers."""
 
 from __future__ import annotations
 

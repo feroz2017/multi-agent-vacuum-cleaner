@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive GUI for the cooperative multi-agent vacuum system."""
+"""Pygame UI for multi-agent sim."""
 
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ class VacuumGUI:
 
         self.screen = pygame.display.set_mode((self.window_w, self.window_h))
         pygame.display.set_caption(
-            f"Multi-Agent Vacuum — {LAYOUTS[self.layout_key][0]}"
+            f"Multi-Agent Vacuum: {LAYOUTS[self.layout_key][0]}"
         )
 
         self.font_small = pygame.font.Font(None, 18)
@@ -280,7 +280,7 @@ class VacuumGUI:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Cooperative Vacuum Cleaning — Interactive GUI")
+    p = argparse.ArgumentParser(description="Cooperative vacuum cleaning (GUI)")
     p.add_argument(
         "--layout", default="single",
         choices=list(LAYOUTS.keys()),

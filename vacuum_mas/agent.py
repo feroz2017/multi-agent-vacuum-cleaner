@@ -1,14 +1,4 @@
-"""
-Agent — Model-based reflex vacuum with frontier exploration (Document §10).
-
-Phases per control tick (one primitive action per `run` iteration):
-  1. Sense & clean — suck if dirt_here
-  2. Map update — lookahead: blocked_ahead → O; else forward → U (if not in M∪O)
-  3. Frontier F; if empty and known-free-unvisited U nonempty → visit U (like probe)
-  4. If F empty and U empty → terminate (success)
-  5. Select (f, p), navigate toward p (one turn or one move)
-  6. At p → probe into f (one turn or one move / bump)
-"""
+"""Single vacuum agent: sense/clean, map update, frontier, navigate, probe."""
 
 from __future__ import annotations
 
@@ -80,7 +70,7 @@ class VacuumAgent:
         return True
 
     def _select_u_target(self) -> Tuple[Cell, Cell]:
-        """Pick (u, p) with u ∈ U and p ∈ M adjacent to u; minimize BFS dist to p."""
+        """Closest U with neighbor pivot in M."""
         dist = Navigator.bfs_distances(self.state.pos, self.state.M)
         best_pair: Optional[Tuple[Cell, Cell]] = None
         best_key: Optional[Tuple[int, int, int, int, int, int]] = None
@@ -100,7 +90,7 @@ class VacuumAgent:
         return best_pair
 
     def _one_step_navigate(self, goal_cell: Cell) -> None:
-        """One primitive toward goal_cell ∈ M (must be reachable in M)."""
+        """One turn or move toward goal_cell in M."""
         if self.state.pos == goal_cell:
             return
         path = Navigator.bfs_path(self.state.pos, goal_cell, self.state.M)
@@ -122,7 +112,7 @@ class VacuumAgent:
         self._record("MOVE")
 
     def _one_step_probe(self, f: Cell, p: Cell) -> None:
-        """At pivot p, one primitive toward frontier f."""
+        """From pivot p, step or bump toward frontier f."""
         assert self.state.pos == p
         want = heading_from(p, f)
         if self.state.heading != want:
@@ -143,7 +133,7 @@ class VacuumAgent:
         self._record("PROBE")
 
     def _one_step_enter_known_free(self, u: Cell, p: Cell) -> None:
-        """Enter cell u ∈ U from adjacent p ∈ M (lookahead: guaranteed free)."""
+        """Step from p into lookahead-known-free u."""
         assert self.state.pos == p
         want = heading_from(p, u)
         if self.state.heading != want:
@@ -161,9 +151,7 @@ class VacuumAgent:
         self._record("ENTER_U")
 
     def step_once(self) -> bool:
-        """
-        Execute one primitive action. Returns True if agent should continue, False if done.
-        """
+        """One action; False when finished or already stopped."""
         if self.terminated:
             return False
         self.state.check_invariants()
@@ -223,7 +211,7 @@ class VacuumAgent:
         return True
 
     def run(self, max_steps: int = 500_000) -> bool:
-        """Run until mission complete or max_steps. Returns success flag."""
+        """Loop step_once until done or max_steps; returns success."""
         self.terminated = False
         self.success = False
         while True:

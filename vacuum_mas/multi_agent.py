@@ -1,19 +1,4 @@
-"""
-Cooperative multi-agent vacuum cleaning with peer-to-peer communication.
-
-Implements Advanced Option 2 requirements:
-  - Per-agent local coordinate frames with rendezvous-based synchronization
-  - Explicit message passing (HELLO, MAP, ASSIGN, DONE, ACTIVE)
-  - No central coordinator — all coordination is peer-to-peer
-  - Distributed termination protocol (Phase 5)
-  - Dynamic agent discovery through encounters
-
-Architecture (Shehory & Sturm 2016, §4-5; Wooldridge 2009, Ch.7 & 11):
-  MessageBus          — reliable in-process message relay
-  CoordinateFrame     — per-agent local frame with transform computation
-  AutonomousAgent     — independent agent with 5-phase lifecycle
-  MultiAgentSimulation — tick loop with zero coordination logic
-"""
+"""Multi-agent vacuum: message bus, local frames, HELLO/MAP/ASSIGN/DONE/ACTIVE."""
 
 from __future__ import annotations
 
@@ -41,10 +26,6 @@ AGENT_COLORS: List[Tuple[int, int, int]] = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Communication protocol (Advanced Option 2, §6)
-# ---------------------------------------------------------------------------
-
 class MessageType(Enum):
     HELLO = "HELLO"
     MAP = "MAP"
@@ -62,7 +43,7 @@ class Message:
 
 
 class MessageBus:
-    """Simulates reliable peer-to-peer message delivery between agents."""
+    """Per-agent deques; send pushes to recipient inbox."""
 
     def __init__(self) -> None:
         self._inboxes: Dict[int, deque] = {}
@@ -86,13 +67,9 @@ class MessageBus:
         return msgs
 
 
-# ---------------------------------------------------------------------------
-# Coordinate frame system (Advanced Option 2, §4.1)
-# ---------------------------------------------------------------------------
-
 @dataclass
 class CoordinateFrame:
-    """Per-agent local frame.  Agent starts at local (0,0)."""
+    """Maps absolute grid coords to/from this agent's local origin."""
     origin_x: int
     origin_y: int
 
@@ -108,19 +85,7 @@ def compute_frame_transform(
     their_local: Cell,
     offset_me_to_them: Tuple[int, int] = (0, 0),
 ) -> Tuple[int, int]:
-    """
-    Compute transform that converts coordinates in THEIR frame to MY frame.
-
-    offset_me_to_them = their_absolute - my_absolute  (direction from me to them).
-    When agents are co-located, offset is (0, 0).
-
-    Derivation:
-      my_abs = my_origin + my_local
-      their_abs = their_origin + their_local = my_abs + offset
-      => their_origin = my_origin + my_local + offset - their_local
-      transform (their->mine) = their_origin - my_origin
-                               = my_local + offset - their_local
-    """
+    """Delta to add to peer-local cells to express them in my local frame."""
     dx = my_local[0] + offset_me_to_them[0] - their_local[0]
     dy = my_local[1] + offset_me_to_them[1] - their_local[1]
     return (dx, dy)
@@ -147,10 +112,6 @@ def _reverse(t: Tuple[int, int]) -> Tuple[int, int]:
     return (-t[0], -t[1])
 
 
-# ---------------------------------------------------------------------------
-# Start position computation
-# ---------------------------------------------------------------------------
-
 def compute_start_positions(world: GridWorld, num_agents: int) -> List[Cell]:
     if num_agents <= 0:
         return []
@@ -164,19 +125,8 @@ def compute_start_positions(world: GridWorld, num_agents: int) -> List[Cell]:
     return starts
 
 
-# ---------------------------------------------------------------------------
-# AutonomousAgent  (Advanced Option 2, §3 & §5)
-# ---------------------------------------------------------------------------
-
 class AutonomousAgent:
-    """
-    Fully autonomous agent with own coordinate frame and peer-to-peer comms.
-
-    Lifecycle phases (§5):
-      exploring   — independent frontier exploration (no known peers)
-      coordinated — merged maps with peers, working on assigned region
-      done        — local frontier empty, waiting for distributed termination
-    """
+    """One robot: local M/O/U, peers, phases exploring / coordinated / done."""
 
     MAP_SHARE_INTERVAL = 15
 
@@ -199,7 +149,6 @@ class AutonomousAgent:
 
         self.frame = CoordinateFrame(abs_start[0], abs_start[1])
 
-        # All map data stored in LOCAL coordinates
         self.local_pos: Cell = (0, 0)
         self.heading: Direction = Direction.NORTH
         self.local_M: Set[Cell] = {(0, 0)}
@@ -207,25 +156,21 @@ class AutonomousAgent:
         self.local_U: Set[Cell] = set()
         self.local_parent: Dict[Cell, Optional[Cell]] = {(0, 0): None}
 
-        # Peer discovery & frame sync
         self.known_agents: Set[int] = set()
         self.transforms: Dict[int, Tuple[int, int]] = {}
-        self.known_positions: Dict[int, Cell] = {}  # other agent local pos in MY frame
+        self.known_positions: Dict[int, Cell] = {}
         self.merged_with: Set[int] = set()
-        self._pending_hello_pos: Dict[int, Cell] = {}  # saved local_pos at HELLO send time
+        self._pending_hello_pos: Dict[int, Cell] = {}
 
-        # Phase and termination
         self.phase: str = "exploring"
         self.assigned_region: Optional[Set[Cell]] = None
         self.done_agents: Set[int] = set()
         self.is_done: bool = False
 
-        # Current target (local coords)
         self._target_frontier: Optional[Cell] = None
         self._target_pivot: Optional[Cell] = None
-        self.current_path: List[Cell] = []  # ABSOLUTE coords for rendering
+        self.current_path: List[Cell] = []
 
-        # Stats
         self.step_count: int = 0
         self.dirt_cleaned: int = 0
         self.cells_discovered: int = 0
@@ -233,8 +178,6 @@ class AutonomousAgent:
         self.history: List[Tuple[str, Dict[str, Any]]] = []
 
         self.frontier_mgr = FrontierManager()
-
-    # ----- public properties for GUI compatibility -----
 
     @property
     def pos(self) -> Cell:
@@ -250,8 +193,6 @@ class AutonomousAgent:
             return self.frame.to_absolute(self._target_frontier)
         return None
 
-    # ----- internal helpers -----
-
     def _local_forward(self) -> Cell:
         return (self.local_pos[0] + self.heading.dx,
                 self.local_pos[1] + self.heading.dy)
@@ -266,10 +207,6 @@ class AutonomousAgent:
             "phase": self.phase,
         }))
 
-    # =================================================================
-    # MAIN TICK — called once per global tick
-    # =================================================================
-
     def step_once(self, tick: int) -> bool:
         self._sense()
         self._process_messages(tick)
@@ -278,7 +215,6 @@ class AutonomousAgent:
         if tick > 0 and tick % self.MAP_SHARE_INTERVAL == 0:
             self._periodic_map_share(tick)
 
-        # Highest priority: clean dirt
         if self.world.dirt_here(self.pos):
             self.world.suck_for_agent(self.agent_id, self.pos)
             self.dirt_cleaned += 1
@@ -295,10 +231,6 @@ class AutonomousAgent:
         self._explore_step(tick)
         return True
 
-    # =================================================================
-    # Phase 1: Sense (update local map from sensors)
-    # =================================================================
-
     def _sense(self) -> None:
         if self.local_pos not in self.local_M:
             self.local_M.add(self.local_pos)
@@ -312,10 +244,6 @@ class AutonomousAgent:
                 self.local_U.discard(fwd_local)
             elif fwd_local not in self.local_M and fwd_local not in self.local_O:
                 self.local_U.add(fwd_local)
-
-    # =================================================================
-    # Phase 2: Process incoming messages
-    # =================================================================
 
     def _process_messages(self, tick: int) -> None:
         for msg in self.message_bus.receive_all(self.agent_id):
@@ -350,7 +278,6 @@ class AutonomousAgent:
                 their_local_pos[1] + transform[1],
             )
 
-            # Reply with own HELLO (include reciprocal offset)
             self.message_bus.send(
                 Message(MessageType.HELLO, self.agent_id, tick, {
                     "local_pos": self.local_pos,
@@ -359,7 +286,6 @@ class AutonomousAgent:
                 sid,
             )
 
-            # Immediately share full map
             self._send_map_to(sid, tick)
 
     def _handle_map(self, msg: Message) -> None:
@@ -367,7 +293,6 @@ class AutonomousAgent:
         if sid not in self.transforms:
             return
 
-        # Cells arrive pre-translated to MY frame (see _send_map_to)
         remote_M: Set[Cell] = msg.payload["M"]
         remote_O: Set[Cell] = msg.payload["O"]
         remote_U: Set[Cell] = msg.payload["U"]
@@ -386,7 +311,6 @@ class AutonomousAgent:
         if self.phase == "exploring":
             self.phase = "coordinated"
 
-        # If I'm the group leader, recompute partition
         group = {self.agent_id} | self.known_agents
         if min(group) == self.agent_id:
             self._compute_and_send_assignments(msg.tick)
@@ -409,10 +333,6 @@ class AutonomousAgent:
             self.phase = "coordinated" if self.merged_with else "exploring"
             self.is_done = False
 
-    # =================================================================
-    # Agent-presence detection  (§1 Sensors)
-    # =================================================================
-
     def _detect_nearby_agents(self, tick: int) -> None:
         nearby = self.world.nearby_agents_with_offset(self.pos, self.agent_id)
         for other_id, offset_me_to_them in nearby:
@@ -425,10 +345,6 @@ class AutonomousAgent:
                     }),
                     other_id,
                 )
-
-    # =================================================================
-    # Map sharing helpers
-    # =================================================================
 
     def _send_map_to(self, target_id: int, tick: int) -> None:
         rev = _reverse(self.transforms[target_id])
@@ -449,10 +365,6 @@ class AutonomousAgent:
         for aid in self.known_agents:
             self._send_map_to(aid, tick)
 
-    # =================================================================
-    # Task partitioning  (§5 Phase 3 — leader sends ASSIGN)
-    # =================================================================
-
     def _compute_and_send_assignments(self, tick: int) -> None:
         F_all = compute_frontier(
             self.local_M, self.local_O,
@@ -467,7 +379,6 @@ class AutonomousAgent:
             if aid in self.known_positions:
                 agent_positions[aid] = self.known_positions[aid]
 
-        # BFS-distance Voronoi partition in MY frame
         dist_maps: Dict[int, Dict[Cell, int]] = {}
         for aid, apos in agent_positions.items():
             if apos in self.local_M:
@@ -488,10 +399,8 @@ class AutonomousAgent:
             if best_aid is not None:
                 assignment[best_aid].add(f)
 
-        # My own region
         self.assigned_region = assignment.get(self.agent_id, set())
 
-        # Send ASSIGN to each known agent (translate to THEIR frame)
         for aid in self.known_agents:
             region_my_frame = assignment.get(aid, set())
             rev = _reverse(self.transforms[aid])
@@ -501,10 +410,6 @@ class AutonomousAgent:
                         {"region": region_their_frame}),
                 aid,
             )
-
-    # =================================================================
-    # Exploration / navigation  (§5 Phases 1, 3, 4)
-    # =================================================================
 
     def _explore_step(self, tick: int) -> None:
         F_all = compute_frontier(
@@ -601,8 +506,6 @@ class AutonomousAgent:
             self.current_path = [self.frame.to_absolute(c) for c in local_path]
         except NavigationError:
             self.current_path = []
-
-    # ----- single-action navigation -----
 
     def _do_navigate_or_probe(self) -> None:
         f = self._target_frontier
@@ -706,10 +609,6 @@ class AutonomousAgent:
         self._target_pivot = None
         self.current_path = []
 
-    # =================================================================
-    # Distributed termination  (§5 Phase 5)
-    # =================================================================
-
     def _enter_done(self, tick: int) -> None:
         if self.phase != "done":
             self.phase = "done"
@@ -733,10 +632,6 @@ class AutonomousAgent:
             )
 
 
-# ---------------------------------------------------------------------------
-# GlobalView — read-only merged view for rendering (not used by agents)
-# ---------------------------------------------------------------------------
-
 @dataclass
 class _GlobalView:
     M: Set[Cell]
@@ -750,15 +645,8 @@ class _GlobalView:
         return frontiers_with_m_pivot(F, self.M)
 
 
-# ---------------------------------------------------------------------------
-# MultiAgentSimulation  — tick loop, zero coordination logic
-# ---------------------------------------------------------------------------
-
 class MultiAgentSimulation:
-    """
-    Simulation harness that ticks autonomous agents.
-    All coordination is internal to agents via MessageBus.
-    """
+    """Steps all agents; termination when everyone is done and peers agree."""
 
     def __init__(
         self,
@@ -801,7 +689,6 @@ class MultiAgentSimulation:
 
         self.tick_count += 1
 
-        # Distributed termination: all agents report done
         if all(a.is_done for a in self.agents):
             all_settled = True
             for a in self.agents:
@@ -814,8 +701,6 @@ class MultiAgentSimulation:
                 return False
 
         return True
-
-    # ----- rendering support -----
 
     @property
     def shared_map(self) -> _GlobalView:
@@ -885,9 +770,5 @@ class MultiAgentSimulation:
             ],
         }
 
-
-# ---------------------------------------------------------------------------
-# Backward-compatible aliases
-# ---------------------------------------------------------------------------
 
 MultiAgentCoordinator = MultiAgentSimulation

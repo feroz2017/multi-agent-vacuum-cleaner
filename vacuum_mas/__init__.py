@@ -1,4 +1,4 @@
-"""Multi-agent cooperative vacuum cleaning (discrete grid, peer-to-peer coordination)."""
+"""vacuum_mas: grid world + single- and multi-agent vacuum."""
 
 __version__ = "1.0.0"
 

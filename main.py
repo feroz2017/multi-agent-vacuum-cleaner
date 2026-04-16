@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI runner for single-agent and cooperative multi-agent cleaning."""
+"""CLI: single or multi-agent runs."""
 
 from __future__ import annotations
 

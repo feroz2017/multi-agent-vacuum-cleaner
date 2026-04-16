@@ -1,12 +1,4 @@
-"""
-Grid renderer — pygame drawing for the vacuum agent GUI.
-
-Renders two views side-by-side:
-  LEFT  : True world (god's-eye view) — walls, dirt, agent
-  RIGHT : Agent belief (what the agent knows) — M, O, U, frontier, BFS path
-
-Provides drawing primitives, color palette, and a legend strip.
-"""
+"""Pygame helpers: true map, belief map, legend, stats."""
 
 from __future__ import annotations
 
@@ -22,10 +14,6 @@ if TYPE_CHECKING:
     from .simulator import GridWorld
 
 
-# ---------------------------------------------------------------------------
-# Color palette
-# ---------------------------------------------------------------------------
-
 COLORS = {
     "bg":             (30, 33, 40),
     "panel_bg":       (38, 42, 52),
@@ -37,17 +25,15 @@ COLORS = {
     "agent":          (40, 160, 220),
     "agent_outline":  (20, 90, 140),
     "grid_line":      (170, 175, 185),
-    # Belief-map specific
-    "visited":        (190, 220, 190),      # M — soft green
-    "blocked":        (55, 60, 72),         # O — same as wall
-    "unvisited":      (180, 200, 240),      # U — light blue
-    "frontier":       (100, 200, 100),      # F — bright green
+    "visited":        (190, 220, 190),
+    "blocked":        (55, 60, 72),
+    "unvisited":      (180, 200, 240),
+    "frontier":       (100, 200, 100),
     "frontier_ring":  (60, 170, 60),
-    "unknown":        (85, 88, 100),        # ? — dark grey
-    "path":           (255, 180, 80),       # BFS path — orange
+    "unknown":        (85, 88, 100),
+    "path":           (255, 180, 80),
     "path_dot":       (230, 140, 40),
-    "target":         (255, 80, 80),        # frontier target — red
-    # UI
+    "target":         (255, 80, 80),
     "text":           (220, 225, 235),
     "text_dim":       (140, 145, 155),
     "text_heading":   (255, 220, 100),
@@ -56,21 +42,13 @@ COLORS = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Coordinate helpers
-# ---------------------------------------------------------------------------
-
 def _cell_rect(
     gx: int, gy: int, height: int, cell: int, offset_x: int = 0, offset_y: int = 0
 ) -> pygame.Rect:
-    """Grid cell (gx, gy) with y-up -> pygame rect with y-down."""
+    """Cell rect; grid y-up to screen y-down."""
     row = height - 1 - gy
     return pygame.Rect(offset_x + gx * cell, offset_y + row * cell, cell, cell)
 
-
-# ---------------------------------------------------------------------------
-# Agent triangle
-# ---------------------------------------------------------------------------
 
 def _draw_agent(
     surface: pygame.Surface,
@@ -95,10 +73,6 @@ def _draw_agent(
     pygame.draw.polygon(surface, outline, pts, 2)
 
 
-# ---------------------------------------------------------------------------
-# True-world view (left panel)
-# ---------------------------------------------------------------------------
-
 def draw_true_world(
     surface: pygame.Surface,
     world: "GridWorld",
@@ -108,7 +82,6 @@ def draw_true_world(
     offset_x: int = 0,
     offset_y: int = 0,
 ) -> None:
-    """Draw the true grid: walls, floor, dirt, start marker, agent."""
     h, w = world.height, world.width
     cs = cell_size
 
@@ -128,14 +101,9 @@ def draw_true_world(
                     pygame.draw.rect(surface, COLORS["dirt_outline"], dirt_rect, 1, border_radius=cs // 6)
             pygame.draw.rect(surface, COLORS["grid_line"], rect, 1)
 
-    # Agent
     agent_rect = _cell_rect(agent_pos[0], agent_pos[1], h, cs, offset_x, offset_y)
     _draw_agent(surface, agent_rect, heading)
 
-
-# ---------------------------------------------------------------------------
-# Belief-map view (right panel)
-# ---------------------------------------------------------------------------
 
 def draw_belief_map(
     surface: pygame.Surface,
@@ -148,7 +116,6 @@ def draw_belief_map(
     offset_x: int = 0,
     offset_y: int = 0,
 ) -> None:
-    """Draw the agent's belief: M (visited), O (blocked), U (unvisited), frontier, path."""
     h, w = world.height, world.width
     cs = cell_size
     path_set = set(path_cells)
@@ -158,7 +125,6 @@ def draw_belief_map(
             rect = _cell_rect(gx, gy, h, cs, offset_x, offset_y)
             c = (gx, gy)
 
-            # Classify from agent's perspective
             cs_state = state.cell_state(c)
             if cs_state == CellState.FREE_VISITED:
                 fill = COLORS["visited"]
@@ -173,27 +139,22 @@ def draw_belief_map(
 
             pygame.draw.rect(surface, fill, rect)
 
-            # Frontier ring highlight
             if c in frontier:
                 pygame.draw.rect(surface, COLORS["frontier_ring"], rect, 2)
 
-            # BFS path overlay
             if c in path_set and c != state.pos:
                 dot_r = max(3, cs // 8)
                 pygame.draw.circle(surface, COLORS["path"], rect.center, dot_r)
 
-            # Target frontier cell
             if target_frontier and c == target_frontier:
                 pygame.draw.rect(surface, COLORS["target"], rect, 3)
 
-            # Dirt indicator on visited cells
             if c in state.M and c in world.dirt:
                 dot_r = max(2, cs // 10)
                 pygame.draw.circle(surface, COLORS["dirt"], rect.center, dot_r)
 
             pygame.draw.rect(surface, COLORS["grid_line"], rect, 1)
 
-    # Draw BFS path as connected line
     if len(path_cells) >= 2:
         pts = []
         for pc in path_cells:
@@ -201,7 +162,6 @@ def draw_belief_map(
             pts.append(r.center)
         pygame.draw.lines(surface, COLORS["path"], False, pts, 2)
 
-    # Agent
     agent_rect = _cell_rect(state.x, state.y, h, cs, offset_x, offset_y)
     _draw_agent(surface, agent_rect, state.heading)
 
@@ -304,10 +264,6 @@ def draw_belief_map_multi(
         _draw_agent(surface, rect, heading, color=color)
 
 
-# ---------------------------------------------------------------------------
-# Panel labels and dividers
-# ---------------------------------------------------------------------------
-
 def draw_panel_label(
     surface: pygame.Surface,
     text: str,
@@ -320,10 +276,6 @@ def draw_panel_label(
     rect = rendered.get_rect(midtop=(x, y))
     surface.blit(rendered, rect)
 
-
-# ---------------------------------------------------------------------------
-# Legend bar
-# ---------------------------------------------------------------------------
 
 _LEGEND_ITEMS = [
     ("Visited (M)", "visited"),
@@ -344,7 +296,6 @@ def draw_legend(
     width: int,
     font: pygame.font.Font,
 ) -> None:
-    """Draw a horizontal legend bar at vertical position y."""
     pygame.draw.rect(surface, COLORS["legend_bg"], (0, y, width, 30))
     pygame.draw.line(surface, COLORS["divider"], (0, y), (width, y))
 
@@ -359,10 +310,6 @@ def draw_legend(
         x += rendered.get_width() + 16
 
 
-# ---------------------------------------------------------------------------
-# Stats sidebar
-# ---------------------------------------------------------------------------
-
 def draw_stats_panel(
     surface: pygame.Surface,
     x: int,
@@ -373,7 +320,6 @@ def draw_stats_panel(
     font: pygame.font.Font,
     title_font: pygame.font.Font,
 ) -> None:
-    """Draw a stats panel with key-value pairs."""
     pygame.draw.rect(surface, COLORS["panel_bg"], (x, y, width, height))
     pygame.draw.rect(surface, COLORS["divider"], (x, y, width, height), 1)
 
@@ -389,10 +335,6 @@ def draw_stats_panel(
         surface.blit(val_surf, (x + 10 + key_surf.get_width() + 6, ty))
         ty += 20
 
-
-# ---------------------------------------------------------------------------
-# Init helper
-# ---------------------------------------------------------------------------
 
 def init_pygame() -> None:
     pygame.init()

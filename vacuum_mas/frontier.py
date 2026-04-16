@@ -1,12 +1,4 @@
-"""
-Frontier — Compute F and select (frontier_cell, pivot) pairs.
-
-F = { c | c ∉ M ∪ O ∪ U  and  c is 4-adjacent to some cell in M ∪ U }
-(When U is unused / empty, this matches classic unknown-adjacent-to-M.)
-
-Selection: nearest BFS distance to pivot p ∈ M, then Warnsdorff (fewer unknown
-neighbors of f), then boustrophedon (prefer f on same row as current).
-"""
+"""Frontier cells next to known area; pick (frontier, pivot) with nearest / Warnsdorff / boustrophedon."""
 
 from __future__ import annotations
 
@@ -22,12 +14,7 @@ def compute_frontier(
     O: Set[Cell],
     U: Optional[Set[Cell]] = None,
 ) -> Set[Cell]:
-    """
-    Unknown cells adjacent to known-free region (M, or M ∪ U when U is given).
-
-    Cells in U are known free but unvisited — they are not frontiers themselves,
-    but expand the region from which unknown neighbors are discovered.
-    """
+    """Unknown cells touching M (or M|U if U is used)."""
     base: Set[Cell] = set(M)
     if U:
         base |= U
@@ -71,7 +58,7 @@ def frontiers_with_m_pivot(F: Set[Cell], M: Set[Cell]) -> Set[Cell]:
 
 
 class FrontierManager:
-    """Compute frontiers and select (f, p) with document §8 heuristics."""
+    """Wrapper around compute_frontier + selection heuristics."""
 
     def compute_frontier(
         self,
@@ -89,7 +76,7 @@ class FrontierManager:
         O: Set[Cell],
         U: Optional[Set[Cell]] = None,
     ) -> Tuple[Cell, Cell]:
-        """Primary: minimize BFS distance from current_pos to pivot p ∈ M."""
+        """Pick pivot in M closest by BFS from current_pos."""
         if not F:
             raise ValueError("Frontier F is empty")
 
@@ -152,9 +139,7 @@ class FrontierManager:
         O: Set[Cell],
         U: Optional[Set[Cell]] = None,
     ) -> Tuple[Cell, Cell]:
-        """
-        Nearest + Warnsdorff, then prefer frontier on same y as agent (§8.4).
-        """
+        """Nearest + Warnsdorff; prefer frontier row aligned with agent."""
         if not F:
             raise ValueError("Frontier F is empty")
 

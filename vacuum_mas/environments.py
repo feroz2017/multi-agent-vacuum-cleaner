@@ -1,4 +1,4 @@
-"""Free-shape environment generators for cooperative experiments."""
+"""Procedural caves, floor plans, warehouse layouts."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def create_cave(
         free.add(start)
         walls.discard(start)
 
-    # Keep only the largest connected component to guarantee full reachability.
+    # keep largest connected free region
     seen: Set[Cell] = set()
     components: List[Set[Cell]] = []
     for cell in sorted(free):
@@ -155,7 +155,7 @@ def create_floor_plan(
         for y in range(min(y1, y2), max(y1, y2) + 1):
             walls.discard((x2, y))
 
-    # Ensure the start area is open and connected to the carved structure.
+    # keep start connected
     for x in range(0, min(3, width)):
         for y in range(0, min(3, height)):
             walls.discard((x, y))
@@ -197,7 +197,6 @@ def create_warehouse(
         if y_cursor >= height - 1:
             break
 
-    # Cross aisles.
     stride = max(5, width // 5)
     for x in range(2, width - 2, stride):
         for y in range(1, height - 1):
@@ -205,7 +204,6 @@ def create_warehouse(
             if x + 1 < width - 1:
                 walls.discard((x + 1, y))
 
-    # Loading dock area.
     for x in range(0, width):
         for y in range(0, dock_height):
             walls.discard((x, y))

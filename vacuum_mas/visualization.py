@@ -1,6 +1,4 @@
-"""
-ASCII visualization — agent belief vs optional true world hints.
-"""
+"""ASCII grid of agent belief (optional frontier)."""
 
 from __future__ import annotations
 
@@ -17,10 +15,7 @@ def render_belief_grid(
     *,
     show_frontier: bool = True,
 ) -> str:
-    """
-    Render [0, width) x [0, height) using agent's M, O, U and optional frontier ~.
-    Agent shown as @ with heading arrow inside second line or suffix.
-    """
+    """Text grid from M/O/U; agent as @."""
     F: Set[Cell] = set()
     if show_frontier:
         F = compute_frontier(

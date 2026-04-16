@@ -1,17 +1,4 @@
-"""
-Comprehensive tests for the peer-to-peer multi-agent vacuum system.
-
-Tests cover:
-  - Message bus delivery
-  - Coordinate frame transforms
-  - Agent discovery and map sharing
-  - Distributed task partitioning
-  - Collision avoidance
-  - Distributed termination protocol
-  - Full simulation completeness on built-in layouts
-  - Generated environment completeness
-  - Determinism (same seed -> same result)
-"""
+"""Tests for multi_agent sim, bus, frames, layouts."""
 
 from __future__ import annotations
 
@@ -41,10 +28,6 @@ from vacuum_mas.simulator import (
 from vacuum_mas.environments import create_cave, create_floor_plan, create_warehouse
 
 
-# ---------------------------------------------------------------
-# helpers
-# ---------------------------------------------------------------
-
 def _run_to_completion(
     world: GridWorld,
     num_agents: int = 3,
@@ -56,10 +39,6 @@ def _run_to_completion(
             break
     return sim.get_results()
 
-
-# ---------------------------------------------------------------
-# MessageBus tests
-# ---------------------------------------------------------------
 
 class TestMessageBus:
     def test_send_and_receive(self):
@@ -100,10 +79,6 @@ class TestMessageBus:
         assert len(bus.receive_all(0)) == 0
 
 
-# ---------------------------------------------------------------
-# CoordinateFrame tests
-# ---------------------------------------------------------------
-
 class TestCoordinateFrame:
     def test_to_local_and_back(self):
         frame = CoordinateFrame(origin_x=3, origin_y=5)
@@ -131,10 +106,6 @@ class TestCoordinateFrame:
         translated = translate_cells(cells, (3, -1))
         assert translated == {(3, -1), (4, 0), (2, 1)}
 
-
-# ---------------------------------------------------------------
-# Agent discovery and map merge
-# ---------------------------------------------------------------
 
 class TestAgentDiscovery:
     def test_hello_creates_transform(self):
@@ -180,10 +151,6 @@ class TestAgentDiscovery:
             prev_size = len(a0.local_M)
 
 
-# ---------------------------------------------------------------
-# Collision avoidance
-# ---------------------------------------------------------------
-
 class TestCollisionAvoidance:
     def test_agents_dont_overlap(self):
         """During simulation, no two agents should occupy the same cell."""
@@ -200,10 +167,6 @@ class TestCollisionAvoidance:
             else:
                 pass
 
-
-# ---------------------------------------------------------------
-# Distributed termination
-# ---------------------------------------------------------------
 
 class TestTermination:
     def test_done_broadcast(self):
@@ -238,10 +201,6 @@ class TestTermination:
         assert agent.phase != "done" or not agent.is_done or 1 not in agent.done_agents
 
 
-# ---------------------------------------------------------------
-# Start position computation
-# ---------------------------------------------------------------
-
 class TestStartPositions:
     def test_positions_are_unique(self):
         world = create_single_room(6, 6, seed=1)
@@ -260,10 +219,6 @@ class TestStartPositions:
         starts = compute_start_positions(world, 1)
         assert starts == [world.start]
 
-
-# ---------------------------------------------------------------
-# Full simulation completeness — built-in layouts
-# ---------------------------------------------------------------
 
 class TestCompleteness:
     @pytest.mark.parametrize("name,factory", [
@@ -295,10 +250,6 @@ class TestCompleteness:
         )
 
 
-# ---------------------------------------------------------------
-# Generator validity
-# ---------------------------------------------------------------
-
 class TestGenerators:
     @pytest.mark.parametrize("factory", [
         lambda: create_cave(width=20, height=14, seed=42),
@@ -310,10 +261,6 @@ class TestGenerators:
         assert len(world.reachable) >= 10
         assert world.start in world.reachable
 
-
-# ---------------------------------------------------------------
-# Determinism
-# ---------------------------------------------------------------
 
 class TestDeterminism:
     def test_same_seed_same_result(self):
